@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-const yargs = require('yargs');
-const ghGot = require('gh-got');
-const lodash = require('lodash');
-const pad = require('pad');
+import yargs from 'yargs'
+import ghGot from 'gh-got'
+import lodash from 'lodash'
+import pad from 'pad';
+import {render} from './ui';
 
 const argv = yargs
   .usage('$0 <cmd> [args]')
@@ -61,9 +62,12 @@ const {slackToken, githubAccessToken, githubOrganization, githubUsername} = argv
     };
   }), issue => issue.repository);
 
-  const tabItems = Object.keys(grouped).map(repository => pad(` ${repository}`, 25).slice(0, 25));
+  const repositories = Object.keys(grouped).map(repository => pad(` ${repository}`, 25).slice(0, 25));
 
-  console.log(tabItems);
+  render({
+    repositories,
+    grouped,
+  });
 })()
   .catch(err => {
     console.error(err);
