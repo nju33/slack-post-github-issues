@@ -40,6 +40,12 @@ const argv = yargs
     type: 'string',
     default: 'slack'
   })
+  .option('immidiate', {
+    alias: 'i',
+    describe: 'immidiate post',
+    type: 'boolean',
+    default: false
+  })
   .help().argv;
 
 const {
@@ -48,7 +54,8 @@ const {
   githubAccessToken,
   githubOrganization,
   githubUsername,
-  format
+  format,
+  immidiate,
 } = argv;
 
 (async () => {

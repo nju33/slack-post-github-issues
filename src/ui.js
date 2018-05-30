@@ -365,7 +365,46 @@ export const render = (
   {argv, slack, repositories, grouped, choicedIssues},
   format
 ) => {
-  setTimeout(() => {
+  setTimeout(async () => {
+    if (argv.immidiate) {
+      if (format === 'slack') {
+        const grouped = lodash.groupBy(choicedIssues, issue => issue.repository);
+
+        const data = {
+          token: argv.slackToken,
+          channel: argv.slackChannel,
+          as_user: true,
+          attachments: JSON.stringify(
+            lodash.flatten(
+              Object.keys(grouped).map(repository => {
+                return grouped[repository].map(issue => {
+                  return {
+                    color: issue.history ? '#81888c' : '#2ea9df',
+                    title: issue.issueTitle,
+                    title_link: issue.url,
+                    footer: JSON.stringify({
+                      repository: issue.repository,
+                      id: issue.id
+                    })
+                  };
+                });
+              })
+            )
+          )
+        };
+
+        await got.post('https://slack.com/api/chat.postMessage', {
+          query: data
+        });
+
+        if (slack.isToday()) {
+          await slack.deleteLatestMessage();
+        }
+      }
+
+      return;
+    }
+
     const unmount = inkRender(
       <Ui
         repositories={repositories || []}
