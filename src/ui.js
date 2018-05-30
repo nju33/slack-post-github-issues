@@ -2,7 +2,13 @@ import {h, render as inkRender, Component, Color} from 'ink';
 import pad from 'pad';
 import clear from 'cli-clear';
 import keypress from 'keypress';
-import size from 'window-size';
+import termSize from 'term-size';
+import figures from 'figures';
+import EventEmitter from 'events';
+import lodash from 'lodash';
+import got from 'got';
+
+const ev = new EventEmitter();
 
 // class Counter extends Component {
 //   constructor() {
@@ -31,6 +37,10 @@ import size from 'window-size';
 // }
 
 class Ui extends Component {
+  static repoTextPad = 25;
+  static repoFullPad = pad(' ', Ui.repoTextPad);
+  static issueFullPad = pad(' ', 50);
+
   constructor(props) {
     super(props);
 
@@ -38,12 +48,18 @@ class Ui extends Component {
       return;
     }
 
+    const reponameMaxLength = props.repositories.reduce((result, repo) => {
+      return result > repo.length ? result : repo.length;
+    }, 0);
+
     this.state = {
       area: 'repo',
-      size: size.get(),
+      size: termSize(),
       selectedRepo: props.repositories[0],
-      cursor: 0,
-      choiceIssues: []
+      // selectedIssues: [],
+      cursor: -1,
+      choicedIssues: props.choicedIssues || [],
+      reponameMaxLength
     };
   }
 
@@ -52,54 +68,161 @@ class Ui extends Component {
   }
 
   get items() {
-    // console.log(this.props.grouped[this.state.selectedRepo.trim()])
     return this.props.grouped[this.state.selectedRepo.trim()];
   }
 
-  getIssueTitle(issue) {
+  getRepoText(completedRepo) {
+    return pad(completedRepo, 25);
+  }
+
+  getIssueTitle(issue, selected = false) {
+    if (selected) {
+      return ' ✓ ' + (issue || {issueTitle: ''}).issueTitle.slice(0, 48);
+    }
+
     return (issue || {issueTitle: ''}).issueTitle.slice(0, 48);
   }
 
-  render() {
+  getRepoGap(selected) {
+    if (selected) {
+      return <Color blue>{figures.pointer}</Color>;
+    }
+
+    return <Color hidden>{figures.pointer}</Color>;
+  }
+
+  getRepoText(selected, text) {
+    if (selected) {
+      return (
+        <Color>
+          {pad(text, this.state.reponameMaxLength) ||
+            pad(' ', this.state.reponameMaxLength)}
+        </Color>
+      );
+    }
+
+    return (
+      <Color gray>
+        {pad(text, this.state.reponameMaxLength) ||
+          pad(' ', this.state.reponameMaxLength)}
+      </Color>
+    );
+  }
+
+  getIssueGap(choiced) {
+    if (choiced) {
+      return <Color blue>{figures.tick}</Color>;
+    }
+
+    return (
+      <Color blue hidden>
+        {figures.tick}
+      </Color>
+    );
+  }
+
+  getIssueText(choiced, target, text) {
+    let colorProps = {white: true};
+    if (choiced) {
+      colorProps = {bgBlue: true, black: true};
+    }
+    if (target) {
+      colorProps = {bgBlue: true, black: true};
+    }
+
+    return <Color {...colorProps}>{text || Ui.issueFullPad}</Color>;
+  }
+
+  getRepositoryByIndex(index) {
+    return this.props.repositories[index];
+  }
+
+  getIssueByIndex(index) {
+    return this.items[index];
+  }
+
+  isSelectedRepo(repo) {
+    return this.state.selectedRepo === repo;
+  }
+
+  isChoicedIssue(issue) {
+    return this.state.choicedIssues.includes(issue);
+  }
+
+  isTargetIssue(issue, lineNumber) {
+    return this.items[lineNumber] === issue;
+  }
+
+  get header() {
     return (
       <div>
-        {([...this.props.repositories] || []).map((repo, i) => {
-          if (this.state.selectedRepo === repo) {
-            return (
-              <div key={repo}>
-                <Color blue>{'*' + repo}</Color>{' '}
-                {this.isIssueAreaActive() && this.state.cursor === i ? (
-                  <Color bgWhite white>
-                    this.getIssueTitle(this.items[i])
-                  </Color>
-                ) : (
-                  this.getIssueTitle(this.items[i])
-                )}
-              </div>
-            );
-          }
-          return (
-            <div key={repo}>
-              {repo}{' '}
-              {this.isIssueAreaActive() && this.state.cursor === i ? (
-                <Color bgWhite black>
-                  this.getIssueTitle(this.items[i])
-                </Color>
-              ) : (
-                this.getIssueTitle(this.items[i])
-              )}
-            </div>
-          );
-        })}
+        <Color gray>{pad('', this.state.size.columns, '-')}</Color>
+      </div>
+    );
+  }
 
-        {this.props.repositories.length < this.items.length &&
-          this.items.slice(this.props.repositories.length - 1).map(item => {
-            return (
-              <div key={item.id}>
-                {pad(25, '') + ' ' + this.getIssueTitle(item)}
-              </div>
-            );
-          })}
+  get footer() {
+    return (
+      <div>
+        <div>
+          <Color gray>{pad('', this.state.size.columns, '-')}</Color>
+        </div>
+        <div>
+          <Color gray>
+            {figures.arrowLeft} {figures.arrowUp} {figures.arrowDown}{' '}
+            {figures.arrowRight} {'[space]'} {'[enter]'}
+          </Color>
+        </div>
+      </div>
+    );
+  }
+
+  render() {
+    let lines = [];
+    let i = 0;
+    while (i < this.state.size.rows) {
+      let repo = this.getRepositoryByIndex(i);
+      let issue = this.getIssueByIndex(i);
+      if (typeof repo === 'undefined' && typeof issue === 'undefined') {
+        break;
+      }
+
+      if (typeof repo === 'undefined') {
+        repo = '';
+      }
+      if (typeof issue === 'undefined') {
+        issue = {};
+      }
+
+      const selectedRepo = this.isSelectedRepo(repo);
+      const repoGap = this.getRepoGap(selectedRepo);
+      const repoText = this.getRepoText(selectedRepo, repo.trim());
+      const choicedIssue = this.isChoicedIssue(issue);
+      const targetIssue = this.isTargetIssue(issue, this.state.cursor);
+      // const issueGap = this.getIssueGap(choicedIssue);
+      const issueText = this.getIssueText(
+        choicedIssue,
+        targetIssue,
+        issue.issueTitle
+      );
+
+      lines.push(
+        <div key={i}>
+          {repoGap}
+          {repoText}
+          {<Color gray> | </Color>}
+          {issueText}
+        </div>
+      );
+
+      i = i + 1;
+    }
+
+    return (
+      <div>
+        {this.header}
+        {lines}
+        {this.footer}
       </div>
     );
   }
@@ -107,21 +230,28 @@ class Ui extends Component {
   componentDidMount() {
     process.stdout.on('resize', function() {
       this.setState({
-        size: size.get()
+        size: termSize()
       });
     });
 
     process.stdin.on('keypress', (ch, key) => {
       // console.log('got "keypress"', key);
       if (key && key.name == 'j') {
-        this.maybeSelectNextRepo();
+        this.keypressJ();
       }
     });
 
     process.stdin.on('keypress', (ch, key) => {
       // console.log('got "keypress"', key);
       if (key && key.name == 'k') {
-        this.maybeSelectPrevRepo();
+        this.keypressK();
+      }
+    });
+
+    process.stdin.on('keypress', (ch, key) => {
+      // console.log('got "keypress"', key);
+      if (key && key.name == 'h') {
+        this.maybeIntoRepoArea();
       }
     });
 
@@ -132,15 +262,27 @@ class Ui extends Component {
       }
     });
 
+    process.stdin.on('keypress', (ch, key) => {
+      if (key && key.name == 'space') {
+        this.keypressSpace();
+      }
+    });
+
+    process.stdin.on('keypress', (ch, key) => {
+      if (key && key.name == 'return') {
+        this.keypressReturn();
+      }
+    });
+
     this.forceUpdate();
   }
 
-  maybeSelectNextRepo() {
+  keypressJ = () => {
     if (this.isIssueAreaActive()) {
       if (this.state.cursor < this.items.length - 1) {
         this.setState({
-          cursor: this.state.cursor + 1,
-        })
+          cursor: this.state.cursor + 1
+        });
       }
 
       return;
@@ -157,14 +299,14 @@ class Ui extends Component {
     this.setState({
       selectedRepo: this.props.repositories[currentIndex + 1]
     });
-  }
+  };
 
-  maybeSelectPrevRepo() {
+  keypressK = () => {
     if (this.isIssueAreaActive()) {
-      if (this.state.cursor > 1) {
+      if (this.state.cursor > 0) {
         this.setState({
-          cursor: this.state.cursor - 1,
-        })
+          cursor: this.state.cursor - 1
+        });
       }
 
       return;
@@ -181,18 +323,97 @@ class Ui extends Component {
     this.setState({
       selectedRepo: this.props.repositories[currentIndex - 1]
     });
-  }
+  };
 
-  maybeIntoIssueArea() {
+  maybeIntoRepoArea = () => {
+    this.setState({
+      area: 'repo',
+      cursor: -1
+    });
+  };
+
+  maybeIntoIssueArea = () => {
     this.setState({
       area: 'issue',
       cursor: 0
     });
-  }
+  };
+
+  keypressSpace = () => {
+    if (!this.isIssueAreaActive()) {
+      return;
+    }
+
+    const {choicedIssues} = this.state;
+    const targetIssue = this.items[this.state.cursor];
+    const index = choicedIssues.findIndex(item => item === targetIssue);
+    if (index === -1) {
+      choicedIssues.push(targetIssue);
+    } else {
+      choicedIssues.splice(index, 1);
+    }
+
+    this.setState({choicedIssues});
+  };
+
+  keypressReturn = () => {
+    ev.emit('unmount', this.state.choicedIssues);
+  };
 }
 
-export const render = ({repositories, grouped}) => {
+export const render = (
+  {argv, slack, repositories, grouped, choicedIssues},
+  format
+) => {
   setTimeout(() => {
-    inkRender(<Ui repositories={repositories || []} grouped={grouped} />);
+    const unmount = inkRender(
+      <Ui
+        repositories={repositories || []}
+        grouped={grouped}
+        choicedIssues={choicedIssues}
+      />
+    );
+
+    ev.on('unmount', async result => {
+      unmount();
+
+      if (format === 'slack') {
+        const grouped = lodash.groupBy(result, issue => issue.repository);
+
+        const data = {
+          token: argv.slackToken,
+          channel: argv.slackChannel,
+          as_user: true,
+          attachments: JSON.stringify(
+            lodash.flatten(
+              Object.keys(grouped).map(repository => {
+                return grouped[repository].map(issue => {
+                  return {
+                    color: issue.history ? '#81888c' : '#2ea9df',
+                    title: issue.issueTitle,
+                    title_link: issue.url,
+                    footer: JSON.stringify({
+                      repository: issue.repository,
+                      id: issue.id
+                    })
+                  };
+                });
+              })
+            )
+          )
+        };
+
+        await got.post('https://slack.com/api/chat.postMessage', {
+          query: data
+        });
+
+        if (slack.isToday()) {
+          await slack.deleteLatestMessage();
+        }
+      } else {
+        throw new Error('不明なフォーマット');
+      }
+      process.exit(0);
+    });
   }, 1000);
 };

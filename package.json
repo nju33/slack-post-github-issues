@@ -8,17 +8,21 @@
   "dependencies": {
     "chalk": "^2.4.1",
     "cli-clear": "^1.0.4",
+    "date-fns": "^1.29.0",
+    "figures": "^2.0.0",
     "gh-got": "^7.0.0",
+    "got": "^8.3.1",
     "ink": "^0.5.0",
     "keypress": "^0.2.1",
     "lodash": "^4.17.10",
     "pad": "^2.1.0",
-    "window-size": "^1.1.0",
+    "term-size": "^1.2.0",
     "yargs": "^11.0.0"
   },
   "devDependencies": {
     "@babel/cli": "^7.0.0-beta.49",
     "@babel/core": "^7.0.0-beta.49",
+    "@babel/plugin-proposal-class-properties": "^7.0.0-beta.49",
     "@babel/plugin-transform-react-jsx": "^7.0.0-beta.49",
     "@babel/preset-env": "^7.0.0-beta.49",
     "@babel/register": "^7.0.0-beta.49",
@@ -28,7 +32,7 @@
     "prettier": "^1.12.1"
   },
   "scripts": {
-    "dev": "node dev.js",
+    "dev": "npx gulp",
     "build": "babel src/cli.js --out-dir dist"
   }
 }

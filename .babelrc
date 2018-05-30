@@ -6,6 +6,7 @@
       {
         "pragma": "h"
       }
-    ]
+    ],
+    "@babel/plugin-proposal-class-properties"
   ]
 }

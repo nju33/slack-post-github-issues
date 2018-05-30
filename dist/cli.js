@@ -11,46 +11,50 @@ var _pad = _interopRequireDefault(require("pad"));
 
 var _ui = require("./ui");
 
+var _slack = require("./slack");
+
+var _util = require("util");
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-const argv = _yargs.default.usage('$0 <cmd> [args]') // .command('hello [name]', 'welcome ter yargs!', (yargs) => {
-//   yargs.positional('name', {
-//     type: 'string',
-//     default: 'Cambi',
-//     describe: 'the name to say hello to'
-//   })
-// }, function (argv) {
-//   console.log('hello', argv.name, 'welcome to yargs!')
-// })
-.option('slack-token', {
+const argv = _yargs.default.usage('$0 <cmd> [args]').option('slack-token', {
   demandOption: true,
-  describe: 'slack\'s token',
+  describe: "slack's token",
+  type: 'string'
+}).option('slack-channel', {
+  demandOption: true,
+  describe: 'to post slack channel',
   type: 'string'
 }).option('github-access-token', {
   demandOption: true,
-  describe: 'github\'s access token',
+  describe: "github's access token",
   type: 'string'
 }).option('github-organization', {
   demandOption: true,
-  describe: 'github\'s organization name',
+  describe: "github's organization name",
   type: 'string'
 }).option('github-username', {
   demandOption: true,
-  describe: 'github\'s username',
+  describe: "github's username",
   type: 'string'
+}).option('format', {
+  alias: 'f',
+  describe: 'output format',
+  type: 'string',
+  default: 'slack'
 }).help().argv;
 
 const {
   slackToken,
+  slackChannel,
   githubAccessToken,
   githubOrganization,
-  githubUsername
-} = argv; // console.log(githubAccessToken);
-// console.log(`/orgs/${githubOrganization}/repos`);
-
+  githubUsername,
+  format
+} = argv;
 (async () => {
   const {
-    body: issues
+    body: preIssues
   } = await (0, _ghGot.default)(`orgs/${githubOrganization}/issues`, {
     token: githubAccessToken,
     query: {
@@ -59,20 +63,40 @@ const {
       sort: 'updated'
     }
   });
-
-  const grouped = _lodash.default.groupBy(issues.map(issue => {
-    return {
-      id: issue.id,
-      repository: issue.repository.full_name,
-      issueTitle: issue.title
-    };
-  }), issue => issue.repository);
-
-  const repositories = Object.keys(grouped).map(repository => (0, _pad.default)(` ${repository}`, 25).slice(0, 25));
-  (0, _ui.render)({
-    repositories,
-    grouped
+  const latestMessage = await (0, _slack.fetchLatestMessage)({
+    slackToken,
+    slackChannel
   });
+  const latestMessageIssues = latestMessage.into();
+  let issues = preIssues.map(issue => ({ ...issue,
+    history: false,
+    id: issue.id,
+    repository: issue.repository.full_name,
+    url: issue.html_url,
+    issueTitle: issue.title
+  }));
+
+  if (latestMessage.isToday()) {
+    issues = [...latestMessageIssues, ...issues];
+  }
+
+  issues = issues = Object.values(issues.reduce((acc, issue) => {
+    acc[issue.id] = issue;
+    return acc;
+  }, {}));
+
+  const grouped = _lodash.default.groupBy(issues, issue => issue.repository);
+
+  const repositories = Object.keys(grouped).map(repository => repository);
+  const unmount = (0, _ui.render)({
+    argv,
+    slack: latestMessage,
+    repositories,
+    grouped,
+    choicedIssues: issues.filter(issue => {
+      return latestMessageIssues.some(lmi => lmi.id === issue.id);
+    })
+  }, format);
 })().catch(err => {
   console.error(err);
 });

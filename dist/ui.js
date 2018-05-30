@@ -13,11 +13,21 @@ var _cliClear = _interopRequireDefault(require("cli-clear"));
 
 var _keypress = _interopRequireDefault(require("keypress"));
 
-var _windowSize = _interopRequireDefault(require("window-size"));
+var _termSize = _interopRequireDefault(require("term-size"));
+
+var _figures = _interopRequireDefault(require("figures"));
+
+var _events = _interopRequireDefault(require("events"));
+
+var _lodash = _interopRequireDefault(require("lodash"));
+
+var _got = _interopRequireDefault(require("got"));
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-// class Counter extends Component {
+function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
+const ev = new _events.default(); // class Counter extends Component {
 //   constructor() {
 //     super();
 //     this.state = {
@@ -38,20 +48,110 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { de
 //     clearInterval(this.timer);
 //   }
 // }
+
 class Ui extends _ink.Component {
   constructor(props) {
     super(props);
+
+    _defineProperty(this, "keypressJ", () => {
+      if (this.isIssueAreaActive()) {
+        if (this.state.cursor < this.items.length - 1) {
+          this.setState({
+            cursor: this.state.cursor + 1
+          });
+        }
+
+        return;
+      }
+
+      const currentIndex = this.props.repositories.findIndex(repo => repo === this.state.selectedRepo);
+
+      if (currentIndex === this.props.repositories.length - 1) {
+        return;
+      }
+
+      this.setState({
+        selectedRepo: this.props.repositories[currentIndex + 1]
+      });
+    });
+
+    _defineProperty(this, "keypressK", () => {
+      if (this.isIssueAreaActive()) {
+        if (this.state.cursor > 0) {
+          this.setState({
+            cursor: this.state.cursor - 1
+          });
+        }
+
+        return;
+      }
+
+      const currentIndex = this.props.repositories.findIndex(repo => repo === this.state.selectedRepo);
+
+      if (currentIndex === 0) {
+        return;
+      }
+
+      this.setState({
+        selectedRepo: this.props.repositories[currentIndex - 1]
+      });
+    });
+
+    _defineProperty(this, "maybeIntoRepoArea", () => {
+      this.setState({
+        area: 'repo',
+        cursor: -1
+      });
+    });
+
+    _defineProperty(this, "maybeIntoIssueArea", () => {
+      this.setState({
+        area: 'issue',
+        cursor: 0
+      });
+    });
+
+    _defineProperty(this, "keypressSpace", () => {
+      if (!this.isIssueAreaActive()) {
+        return;
+      }
+
+      const {
+        choicedIssues
+      } = this.state;
+      const targetIssue = this.items[this.state.cursor];
+      const index = choicedIssues.findIndex(item => item === targetIssue);
+
+      if (index === -1) {
+        choicedIssues.push(targetIssue);
+      } else {
+        choicedIssues.splice(index, 1);
+      }
+
+      this.setState({
+        choicedIssues
+      });
+    });
+
+    _defineProperty(this, "keypressReturn", () => {
+      ev.emit('unmount', this.state.choicedIssues);
+    });
 
     if (props.repositories.length === 0) {
       return;
     }
 
+    const reponameMaxLength = props.repositories.reduce((result, repo) => {
+      return result > repo.length ? result : repo.length;
+    }, 0);
     this.state = {
       area: 'repo',
-      size: _windowSize.default.get(),
+      size: (0, _termSize.default)(),
       selectedRepo: props.repositories[0],
-      cursor: 0,
-      choiceIssues: []
+      // selectedIssues: [],
+      cursor: -1,
+      choicedIssues: props.choicedIssues || [],
+      reponameMaxLength
     };
   }
 
@@ -60,58 +160,176 @@ class Ui extends _ink.Component {
   }
 
   get items() {
-    // console.log(this.props.grouped[this.state.selectedRepo.trim()])
     return this.props.grouped[this.state.selectedRepo.trim()];
   }
 
-  getIssueTitle(issue) {
+  getRepoText(completedRepo) {
+    return (0, _pad.default)(completedRepo, 25);
+  }
+
+  getIssueTitle(issue, selected = false) {
+    if (selected) {
+      return ' ✓ ' + (issue || {
+        issueTitle: ''
+      }).issueTitle.slice(0, 48);
+    }
+
     return (issue || {
       issueTitle: ''
     }).issueTitle.slice(0, 48);
   }
 
+  getRepoGap(selected) {
+    if (selected) {
+      return (0, _ink.h)(_ink.Color, {
+        blue: true
+      }, _figures.default.pointer);
+    }
+
+    return (0, _ink.h)(_ink.Color, {
+      hidden: true
+    }, _figures.default.pointer);
+  }
+
+  getRepoText(selected, text) {
+    if (selected) {
+      return (0, _ink.h)(_ink.Color, null, (0, _pad.default)(text, this.state.reponameMaxLength) || (0, _pad.default)(' ', this.state.reponameMaxLength));
+    }
+
+    return (0, _ink.h)(_ink.Color, {
+      gray: true
+    }, (0, _pad.default)(text, this.state.reponameMaxLength) || (0, _pad.default)(' ', this.state.reponameMaxLength));
+  }
+
+  getIssueGap(choiced) {
+    if (choiced) {
+      return (0, _ink.h)(_ink.Color, {
+        blue: true
+      }, _figures.default.tick);
+    }
+
+    return (0, _ink.h)(_ink.Color, {
+      blue: true,
+      hidden: true
+    }, _figures.default.tick);
+  }
+
+  getIssueText(choiced, target, text) {
+    let colorProps = {
+      white: true
+    };
+
+    if (choiced) {
+      colorProps = {
+        bgBlue: true,
+        black: true
+      };
+    }
+
+    if (target) {
+      colorProps = {
+        bgBlue: true,
+        black: true
+      };
+    }
+
+    return (0, _ink.h)(_ink.Color, colorProps, text || Ui.issueFullPad);
+  }
+
+  getRepositoryByIndex(index) {
+    return this.props.repositories[index];
+  }
+
+  getIssueByIndex(index) {
+    return this.items[index];
+  }
+
+  isSelectedRepo(repo) {
+    return this.state.selectedRepo === repo;
+  }
+
+  isChoicedIssue(issue) {
+    return this.state.choicedIssues.includes(issue);
+  }
+
+  isTargetIssue(issue, lineNumber) {
+    return this.items[lineNumber] === issue;
+  }
+
+  get header() {
+    return (0, _ink.h)("div", null, (0, _ink.h)(_ink.Color, {
+      gray: true
+    }, (0, _pad.default)('', this.state.size.columns, '-')));
+  }
+
+  get footer() {
+    return (0, _ink.h)("div", null, (0, _ink.h)("div", null, (0, _ink.h)(_ink.Color, {
+      gray: true
+    }, (0, _pad.default)('', this.state.size.columns, '-'))), (0, _ink.h)("div", null, (0, _ink.h)(_ink.Color, {
+      gray: true
+    }, _figures.default.arrowLeft, " ", _figures.default.arrowUp, " ", _figures.default.arrowDown, ' ', _figures.default.arrowRight, " ", '[space]', " ", '[enter]')));
+  }
+
   render() {
-    return (0, _ink.h)("div", null, ([...this.props.repositories] || []).map((repo, i) => {
-      if (this.state.selectedRepo === repo) {
-        return (0, _ink.h)("div", {
-          key: repo
-        }, (0, _ink.h)(_ink.Color, {
-          blue: true
-        }, '*' + repo), ' ', this.isIssueAreaActive() && this.state.cursor === i ? (0, _ink.h)(_ink.Color, {
-          bgWhite: true,
-          white: true
-        }, "this.getIssueTitle(this.items[i])") : this.getIssueTitle(this.items[i]));
+    let lines = [];
+    let i = 0;
+
+    while (i < this.state.size.rows) {
+      let repo = this.getRepositoryByIndex(i);
+      let issue = this.getIssueByIndex(i);
+
+      if (typeof repo === 'undefined' && typeof issue === 'undefined') {
+        break;
       }
 
-      return (0, _ink.h)("div", {
-        key: repo
-      }, repo, ' ', this.isIssueAreaActive() && this.state.cursor === i ? (0, _ink.h)(_ink.Color, {
-        bgWhite: true,
-        black: true
-      }, "this.getIssueTitle(this.items[i])") : this.getIssueTitle(this.items[i]));
-    }), this.props.repositories.length < this.items.length && this.items.slice(this.props.repositories.length - 1).map(item => {
-      return (0, _ink.h)("div", {
-        key: item.id
-      }, (0, _pad.default)(25, '') + ' ' + this.getIssueTitle(item));
-    }));
+      if (typeof repo === 'undefined') {
+        repo = '';
+      }
+
+      if (typeof issue === 'undefined') {
+        issue = {};
+      }
+
+      const selectedRepo = this.isSelectedRepo(repo);
+      const repoGap = this.getRepoGap(selectedRepo);
+      const repoText = this.getRepoText(selectedRepo, repo.trim());
+      const choicedIssue = this.isChoicedIssue(issue);
+      const targetIssue = this.isTargetIssue(issue, this.state.cursor); // const issueGap = this.getIssueGap(choicedIssue);
+
+      const issueText = this.getIssueText(choicedIssue, targetIssue, issue.issueTitle);
+      lines.push((0, _ink.h)("div", {
+        key: i
+      }, repoGap, repoText, (0, _ink.h)(_ink.Color, {
+        gray: true
+      }, " | "), issueText));
+      i = i + 1;
+    }
+
+    return (0, _ink.h)("div", null, this.header, lines, this.footer);
   }
 
   componentDidMount() {
     process.stdout.on('resize', function () {
       this.setState({
-        size: _windowSize.default.get()
+        size: (0, _termSize.default)()
       });
     });
     process.stdin.on('keypress', (ch, key) => {
       // console.log('got "keypress"', key);
       if (key && key.name == 'j') {
-        this.maybeSelectNextRepo();
+        this.keypressJ();
       }
     });
     process.stdin.on('keypress', (ch, key) => {
       // console.log('got "keypress"', key);
       if (key && key.name == 'k') {
-        this.maybeSelectPrevRepo();
+        this.keypressK();
+      }
+    });
+    process.stdin.on('keypress', (ch, key) => {
+      // console.log('got "keypress"', key);
+      if (key && key.name == 'h') {
+        this.maybeIntoRepoArea();
       }
     });
     process.stdin.on('keypress', (ch, key) => {
@@ -120,71 +338,77 @@ class Ui extends _ink.Component {
         this.maybeIntoIssueArea();
       }
     });
+    process.stdin.on('keypress', (ch, key) => {
+      if (key && key.name == 'space') {
+        this.keypressSpace();
+      }
+    });
+    process.stdin.on('keypress', (ch, key) => {
+      if (key && key.name == 'return') {
+        this.keypressReturn();
+      }
+    });
     this.forceUpdate();
-  }
-
-  maybeSelectNextRepo() {
-    if (this.isIssueAreaActive()) {
-      if (this.state.cursor < this.items.length - 1) {
-        this.setState({
-          cursor: this.state.cursor + 1
-        });
-      }
-
-      return;
-    }
-
-    const currentIndex = this.props.repositories.findIndex(repo => repo === this.state.selectedRepo);
-
-    if (currentIndex === this.props.repositories.length - 1) {
-      return;
-    }
-
-    this.setState({
-      selectedRepo: this.props.repositories[currentIndex + 1]
-    });
-  }
-
-  maybeSelectPrevRepo() {
-    if (this.isIssueAreaActive()) {
-      if (this.state.cursor > 1) {
-        this.setState({
-          cursor: this.state.cursor - 1
-        });
-      }
-
-      return;
-    }
-
-    const currentIndex = this.props.repositories.findIndex(repo => repo === this.state.selectedRepo);
-
-    if (currentIndex === 0) {
-      return;
-    }
-
-    this.setState({
-      selectedRepo: this.props.repositories[currentIndex - 1]
-    });
-  }
-
-  maybeIntoIssueArea() {
-    this.setState({
-      area: 'issue',
-      cursor: 0
-    });
   }
 
 }
 
+_defineProperty(Ui, "repoTextPad", 25);
+
+_defineProperty(Ui, "repoFullPad", (0, _pad.default)(' ', Ui.repoTextPad));
+
+_defineProperty(Ui, "issueFullPad", (0, _pad.default)(' ', 50));
+
 const render = ({
+  argv,
+  slack,
   repositories,
-  grouped
-}) => {
+  grouped,
+  choicedIssues
+}, format) => {
   setTimeout(() => {
-    (0, _ink.render)((0, _ink.h)(Ui, {
+    const unmount = (0, _ink.render)((0, _ink.h)(Ui, {
       repositories: repositories || [],
-      grouped: grouped
+      grouped: grouped,
+      choicedIssues: choicedIssues
     }));
+    ev.on('unmount', async result => {
+      unmount();
+
+      if (format === 'slack') {
+        const grouped = _lodash.default.groupBy(result, issue => issue.repository);
+
+        const data = {
+          token: argv.slackToken,
+          channel: argv.slackChannel,
+          as_user: true,
+          attachments: JSON.stringify(_lodash.default.flatten(Object.keys(grouped).map(repository => {
+            return grouped[repository].map(issue => {
+              return {
+                color: issue.history ? '#81888c' : '#2ea9df',
+                title: issue.issueTitle,
+                title_link: issue.url,
+                footer: JSON.stringify({
+                  repository: issue.repository,
+                  id: issue.id
+                })
+              };
+            });
+          })))
+        };
+        await _got.default.post('https://slack.com/api/chat.postMessage', {
+          query: data
+        });
+
+        if (slack.isToday()) {
+          await slack.deleteLatestMessage();
+        }
+      } else {
+        throw new Error('不明なフォーマット');
+      }
+
+      process.exit(0);
+    });
   }, 1000);
 };
 
