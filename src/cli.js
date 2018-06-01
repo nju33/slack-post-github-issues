@@ -124,7 +124,7 @@ if (typeof cron !== 'undefined' && !immidiate) {
     return handleRendering();
   }
 
-  let cronTime = '* */1 * * *';
+  let cronTime = '0 */1 * * *';
   if (typeof cron === 'string') {
     cronTime = cron;
   } else if (typeof cron !== 'boolean') {
