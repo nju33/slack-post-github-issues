@@ -109,25 +109,26 @@ class Ui extends Component {
     );
   }
 
-  getIssueGap(choiced) {
-    if (choiced) {
-      return <Color blue>{figures.tick}</Color>;
+  getIssueGap(_choiced, target) {
+    if (target) {
+      return <Color blue>{figures.pointer}</Color>;
     }
 
     return (
       <Color blue hidden>
-        {figures.tick}
+        {figures.pointer}
       </Color>
     );
   }
 
   getIssueText(choiced, target, text) {
     let colorProps = {white: true};
-    if (choiced) {
+    if (choiced && target) {
       colorProps = {bgBlue: true, black: true};
-    }
-    if (target) {
+    } else if (choiced) {
       colorProps = {bgBlue: true, black: true};
+    } else if (target) {
+      colorProps = {white: true};
     }
 
     return <Color {...colorProps}>{text || Ui.issueFullPad}</Color>;
@@ -199,7 +200,7 @@ class Ui extends Component {
       const repoText = this.getRepoText(selectedRepo, repo.trim());
       const choicedIssue = this.isChoicedIssue(issue);
       const targetIssue = this.isTargetIssue(issue, this.state.cursor);
-      // const issueGap = this.getIssueGap(choicedIssue);
+      const issueGap = this.getIssueGap(choicedIssue, targetIssue);
       const issueText = this.getIssueText(
         choicedIssue,
         targetIssue,
@@ -211,6 +212,7 @@ class Ui extends Component {
           {repoGap}
           {repoText}
           {<Color gray> | </Color>}
+          {issueGap}
           {issueText}
         </div>
       );

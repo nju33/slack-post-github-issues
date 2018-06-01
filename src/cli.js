@@ -6,6 +6,7 @@ import pad from 'pad';
 import {render} from './ui';
 import {fetchLatestMessage} from './slack';
 import {isUndefined} from 'util';
+import {CronJob} from 'cron';
 
 const argv = yargs
   .usage('$0 <cmd> [args]')
@@ -46,6 +47,10 @@ const argv = yargs
     type: 'boolean',
     default: false
   })
+  .option('cron', {
+    alias: 'c',
+    describe: 'to run on a regular basis by cron'
+  })
   .help().argv;
 
 const {
@@ -56,54 +61,79 @@ const {
   githubUsername,
   format,
   immidiate,
+  cron
 } = argv;
 
+if (typeof cron !== 'undefined' && !immidiate) {
+  throw new Error('required --immidiate flag when --cron is enabled');
+}
+
 (async () => {
-  const {body: preIssues} = await ghGot(`orgs/${githubOrganization}/issues`, {
-    token: githubAccessToken,
-    query: {
-      filter: 'assigned',
-      state: 'open',
-      sort: 'updated'
+  const handleRendering = await (async () => {
+    const {body: preIssues} = await ghGot(`orgs/${githubOrganization}/issues`, {
+      token: githubAccessToken,
+      query: {
+        filter: 'assigned',
+        state: 'open',
+        sort: 'updated'
+      }
+    });
+
+    const latestMessage = await fetchLatestMessage({slackToken, slackChannel});
+    const latestMessageIssues = latestMessage.into();
+    let issues = preIssues.map(issue => ({
+      ...issue,
+      history: false,
+      id: issue.id,
+      repository: issue.repository.full_name,
+      url: issue.html_url,
+      issueTitle: issue.title
+    }));
+    if (latestMessage.isToday()) {
+      issues = [...latestMessageIssues, ...issues];
     }
+
+    issues = issues = Object.values(
+      issues.reduce((acc, issue) => {
+        acc[issue.id] = issue;
+
+        return acc;
+      }, {})
+    );
+
+    const grouped = lodash.groupBy(issues, issue => issue.repository);
+    const repositories = Object.keys(grouped).map(repository => repository);
+    repositories.forEach(repository => {
+      grouped[repository] = grouped[repository].reverse();
+    });
+    render(
+      {
+        argv,
+        slack: latestMessage,
+        repositories,
+        grouped,
+        choicedIssues: issues.filter(issue => {
+          return latestMessageIssues.some(lmi => lmi.id === issue.id);
+        })
+      },
+      format
+    );
   });
 
-  const latestMessage = await fetchLatestMessage({slackToken, slackChannel});
-  const latestMessageIssues = latestMessage.into();
-  let issues = preIssues.map(issue => ({
-    ...issue,
-    history: false,
-    id: issue.id,
-    repository: issue.repository.full_name,
-    url: issue.html_url,
-    issueTitle: issue.title
-  }));
-  if (latestMessage.isToday()) {
-    issues = [...latestMessageIssues, ...issues];
+  if (typeof cron === 'undefined') {
+    return handleRendering();
   }
 
-  issues = issues = Object.values(
-    issues.reduce((acc, issue) => {
-      acc[issue.id] = issue;
+  let cronTime = '* */1 * * *';
+  if (typeof cron === 'string') {
+    cronTime = cron;
+  } else if (typeof cron !== 'boolean') {
+    throw new TypeError('required boolean|string at --cron');
+  }
 
-      return acc;
-    }, {})
-  );
-
-  const grouped = lodash.groupBy(issues, issue => issue.repository);
-  const repositories = Object.keys(grouped).map(repository => repository);
-  const unmount = render(
-    {
-      argv,
-      slack: latestMessage,
-      repositories,
-      grouped,
-      choicedIssues: issues.filter(issue => {
-        return latestMessageIssues.some(lmi => lmi.id === issue.id);
-      })
-    },
-    format
-  );
+  const job = new CronJob(cronTime, handleRendering, null, false, 'Asia/Tokyo');
+  job.start();
+  console.log(`going cron now at \`${cronTime}\``);
 })().catch(err => {
   console.error(err);
 });
