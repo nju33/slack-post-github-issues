@@ -1,5 +1,8 @@
 # slack-post-github-issues
 
+![npm](https://img.shields.io/npm/v/spgi.svg)
+
+
 ```bash
 npx spgi \
   --slack-token xoxp- \

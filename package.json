@@ -8,7 +8,7 @@
   "files": [
     "dist"
   ],
-  "repository": "git@github.com:nju33/slack-post-github-issues.git",
+  "repository": "nju33/slack-post-github-issues",
   "author": "nju33 <nju33.ki@gmail.com>",
   "license": "MIT",
   "dependencies": {
