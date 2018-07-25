@@ -40,7 +40,7 @@
   },
   "scripts": {
     "dev": "npx gulp",
-    "build": "babel src/cli.js --out-dir dist",
+    "build": "babel src/*.js --out-dir dist",
     "prepare": "yarn build"
   }
 }
