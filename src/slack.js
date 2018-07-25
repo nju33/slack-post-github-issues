@@ -71,5 +71,10 @@ export const fetchLatestMessage = async ctx => {
     }
   });
 
-  return new Slack(JSON.parse(body).messages[0], ctx);
+  try {
+    return new Slack(JSON.parse(body).messages[0], ctx);
+  } catch (_) {
+    const errorResponse = JSON.parse(body);
+    throw new Error(errorResponse.error);
+  }
 };
