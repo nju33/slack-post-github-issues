@@ -1,6 +1,6 @@
 {
   "name": "spgi",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "main": "index.js",
   "bin": {
     "spgi": "dist/cli.js"
