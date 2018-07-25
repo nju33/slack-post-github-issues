@@ -435,6 +435,7 @@ export const render = (
                     title_link: issue.url,
                     footer: JSON.stringify({
                       repository: issue.repository,
+                      number: issue.number,
                       id: issue.id
                     })
                   };
